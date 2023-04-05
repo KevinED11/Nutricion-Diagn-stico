@@ -1,5 +1,6 @@
 from dataclasses import dataclass, asdict
 from enum import Enum
+from abc import ABC, abstractmethod
 
 
 class Generos(Enum):
@@ -19,7 +20,7 @@ class FormulasCalculoKcal(Enum):
     KRUMDIECK = "krumdieck"
 
 
-class FormulasPesoIdeal(str, Enum):
+class FormulasPesoIdeal(Enum):
     LORENTZ = "lorentz"
     PERRAULT = "perrault"
     BROCCA = "brocca"
@@ -31,7 +32,20 @@ Estatura = float | int | None
 Edad = int | None
 Formula = str | None
 DictCalculoPesoIdeal = dict[str, float | int | str]
+DictCalculoCalorias = dict[str, float | int | str]
 
+
+class Calculadora(ABC):
+    @abstractmethod
+    def get_data_persona(self) -> None:
+        pass
+
+    @abstractmethod
+    def calcular(self) -> None:
+        pass
+
+
+# decorador
 def validar_data(func):
     """Decorador encargado de validar los datos de la persona
     """
@@ -78,22 +92,35 @@ def validar_data_persona(genero: Genero = None,
             raise ValueError(f"{errores.get(name_error)}, error en la propiedad de '{name_error}'")
 
 
-def validar_formula_kcal(formula: str, eta: bool) -> None:
+def validar_formula_kcal(formula: str | FormulasCalculoKcal, eta: bool) -> None:
     """Encargada de validar la fórmula elegida por el usuario
     """
-    formula = formula.lower() if isinstance(formula, str) else formula
+    formulas_validas_kcal: tuple[str] = tuple(fo.value for fo in FormulasCalculoKcal)
 
-    formulas_validas: tuple[str] = tuple(fo.value for fo in FormulasCalculoKcal)
+    formula: str = formula.lower() if isinstance(formula, str) else formula
 
     if not isinstance(eta, bool):
-        raise ValueError("Debes colocar True o false")
+        raise ValueError("El valor de 'ETA' debe ser True o False")
 
-    if not isinstance(formula, str):
-        raise ValueError("Debes colocar una cadena de texto")
+    if not isinstance(formula, (str, FormulasCalculoKcal)):
+        raise ValueError("Debes colocar una cadena de texto o un miembro del Enum FormulasCalculoKcal")
 
-    if formula not in formulas_validas:
+    if isinstance(formula, str) and formula not in formulas_validas_kcal:
         raise ValueError(
-            f"Debes colocar una fórmula valida como las que se muestran a continuación: {formulas_validas}.")
+            f"Debes colocar una fórmula valida como las que se muestran a continuación: {formulas_validas_kcal}.")
+
+
+def validar_formula_peso_ideal(formula: str | FormulasPesoIdeal):
+    formulas_validas_peso_ideal: tuple[str] = tuple(fo.value for fo in FormulasPesoIdeal)
+
+    formula = formula.lower() if isinstance(formula, str) else formula
+
+    if not isinstance(formula, (str, FormulasPesoIdeal)):
+        raise ValueError("Debes colocar una cadena de texto o un miembro del enum FormulasPesoIdeal")
+
+    if isinstance(formula, str) and formula not in formulas_validas_peso_ideal:
+        raise ValueError(
+            f"Debes colocar una fórmula valida como las que se muestran a continuación: {formulas_validas_peso_ideal}")
 
 
 def calcular_imc(peso: int | float, estatura: float | int) -> float:
@@ -145,7 +172,7 @@ def rango_peso_saludable(estatura: int | float) -> str:
     tomar como una medida definitiva pero resulta útil
     como referencia.
     """
-    estatura = estatura ** 2 if isinstance(estatura, float) and estatura < 10 else (estatura / 100) ** 2
+    estatura: float = estatura ** 2 if isinstance(estatura, float) and estatura < 10 else (estatura / 100) ** 2
 
     peso_maximo: float = round(estatura * 24.99, ndigits=2)
 
@@ -173,14 +200,24 @@ def calcular_kcal_totales(kcal_base: float,
     return round(kcal_base + eta, ndigits=2)
 
 
+def convertir_metros_a_cm(estatura: float | int) -> float:
+    if isinstance(estatura, float) and estatura < 10:
+        estatura *= 100
+        return float(estatura)
+
+    return float(estatura)
+
+
 def formula_kcal_harris(nombre: str, genero: str, estatura: float | int,
                         peso: float | int, edad: int, usar_eta: bool = True) -> str:
-    """Encargada de calcular las kcal de la persona mediante la fórmula de harris
+    """Encargada de calcular las kcal de la persona mediante la fórmula de
+    harris la cual requiere la estatura en cm
     """
     mensaje: str = f"De acuerdo a la fórmula de harris estimado {nombre}, las kcal que necesitas son: "
 
-    if isinstance(estatura, float) and estatura < 10:
-        estatura *= 100
+    # if isinstance(estatura, float) and estatura < 10:
+    # estatura *= 100
+    estatura: float = convertir_metros_a_cm(estatura=estatura)
 
     if genero == Generos.MUJER.value:
         formula_mujer: float = (655.1
@@ -208,8 +245,7 @@ def formula_kcal_mifflin(nombre: str, genero: str, estatura: float | int,
     """
     mensaje: str = f"De acuerdo a la fórmula de mifflin estimado {nombre}, las kcal que necesitas son: "
 
-    if isinstance(estatura, float) and estatura < 10:
-        estatura *= 100
+    estatura: float = convertir_metros_a_cm(estatura=estatura)
 
     if genero == Generos.MUJER.value:
         formula_mujer: float = ((10 * peso)
@@ -239,8 +275,7 @@ def formula_kcal_fao_oms(nombre: str, genero: str, estatura: float | int,
     """
     mensaje: str = f"De acuerdo a la fórmula de fao/oms estimado {nombre}, las kcal que necesitas son: "
 
-    if isinstance(estatura, float) and estatura < 10:
-        estatura *= 100
+    estatura: float = convertir_metros_a_cm(estatura=estatura)
 
     if genero == Generos.MUJER.value:
         formula_mujer: float = (447.593
@@ -266,7 +301,8 @@ def formula_kcal_fao_oms(nombre: str, genero: str, estatura: float | int,
 
 def formula_kcal_krumdieck(peso: int | float, estatura: int | float) -> float:
     """Encargada de cálcular las kcal de la persona
-    mediante la fórmula de krumdieck
+    mediante la fórmula de krumdieck en la cual se
+    }necesita la estatura en metros
     """
     estatura = estatura if isinstance(estatura, float) and estatura < 10 else (estatura / 100)
 
@@ -330,23 +366,25 @@ class ValoracionNutricional:
             "bajo_peso": "Te encuentras en un bajo peso",
             "normal": "Te encuentras en un peso saludable",
             "sobrepeso": "Te encuentras en sobrepeso",
-            "obesidad": "Tienes un exceso de peso, lo recomendable es acudir con un profesional de la salud"
+            "obesidad": "Te encuentras en obesidad"
         }
 
-        BAJO_PESO = resultado_imc < 18.5
-        NORMAL = resultado_imc >= 18.5 and resultado_imc < 25
-        SOBREPESO = resultado_imc > 24.99 and resultado_imc < 30
+        bajo_peso: bool = resultado_imc < 18.5
+        peso_normal: bool = 18.5 <= resultado_imc < 25
+        sobrepeso: bool = 24.99 < resultado_imc < 30
+        obesidad: bool = 29.99 < resultado_imc < 35
 
-        if BAJO_PESO:
+        if bajo_peso:
             return mensajes.get("bajo_peso")
 
-        elif NORMAL:
+        elif peso_normal:
             return mensajes.get("normal")
 
-        elif SOBREPESO:
+        elif sobrepeso:
             return mensajes.get("sobrepeso")
 
-        return mensajes.get("obesidad")
+        elif obesidad:
+            return mensajes.get("obesidad")
 
     def gasto_energetico(self, nombre: str, genero: str, peso: float | int,
                          estatura: float | int, edad: int,
@@ -358,12 +396,12 @@ class ValoracionNutricional:
 
 
 @dataclass
-class CalculadoraDeCalorias:
+class CalculadoraDeCalorias(Calculadora):
     """Esta clase se encarga de calcular las calorias que necesita
     consumir una persona para mantenerse en su peso actual en base a diferentes parametros
     """
     persona: Persona
-    formula: str = "mifflin"
+    formula: FormulasCalculoKcal | str = FormulasCalculoKcal.MIFFLIN
     eta: bool = True
 
     def __post_init__(self):
@@ -371,38 +409,42 @@ class CalculadoraDeCalorias:
         """
         validar_formula_kcal(formula=self.formula, eta=self.eta)
 
-        self.formula = self.formula.lower()
+        if isinstance(self.formula, str):
+            self.formula = self.formula.lower()
 
-    def get_data_persona(self) -> dict[str, int | float | str]:
+    def get_data_persona(self) -> DictCalculoPesoIdeal:
         """Encaragada de convertir la instancia de persona
         en un diccionario para poder desempaquetarlo en
         las funciones de cálculo de calorias
         """
         return asdict(self.persona)
 
-    def calcular_gasto_energetico(self) -> str:
+    def calcular(self) -> str:
         """Encargada de usar los datos pasados por el usuario
         para calcular sus kcal en base a la fórmula elegida
         """
 
         persona_data: dict[str, int | float | str] = self.get_data_persona()
 
-        if self.formula == FormulasCalculoKcal.HARRIS_BENEDICT.value:
+        if self.formula == FormulasCalculoKcal.HARRIS_BENEDICT or self.formula == FormulasCalculoKcal.HARRIS_BENEDICT.value:
             return formula_kcal_harris(**persona_data, usar_eta=self.eta)
 
-        elif self.formula == FormulasCalculoKcal.MIFFLIN.value:
+        elif self.formula == FormulasCalculoKcal.MIFFLIN or self.formula == FormulasCalculoKcal.MIFFLIN.value:
             return formula_kcal_mifflin(**persona_data, usar_eta=self.eta)
 
-        elif self.formula == FormulasCalculoKcal.FAO_OMS.value:
+        elif self.formula == FormulasCalculoKcal.FAO_OMS or self.formula == FormulasCalculoKcal.FAO_OMS.value:
             return formula_kcal_fao_oms(**persona_data, usar_eta=self.eta)
 
 
 @dataclass
-class CalculadoraPesoIdeal:
+class CalculadoraPesoIdeal(Calculadora):
+    """Clase encargadad de calcular el
+    peso ideal de las personas mediante distintas fórmulas
+    """
     persona: Persona | DictCalculoPesoIdeal
     formula: FormulasPesoIdeal | str = FormulasPesoIdeal.LORENTZ
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if isinstance(self.persona, dict):
             claves_esperadas: set[str] = {"genero", "estatura", "edad"}
 
@@ -416,24 +458,32 @@ class CalculadoraPesoIdeal:
                                  estatura=self.persona.get("estatura"),
                                  edad=self.persona.get("edad"))
 
-    def get_data_persona(self):
+        validar_formula_peso_ideal(formula=self.formula)
+
+    def get_data_persona(self) -> DictCalculoPesoIdeal:
+        """Encargada de devolver un diccionario con los
+        datos necesarios para el cálculo del peso ideal
+        """
         if isinstance(self.persona, Persona):
             return {"genero": self.persona.genero, "estatura": self.persona.estatura,
                     "edad": self.persona.edad}
 
         return self.persona
 
-    def calcular_peso_ideal(self):
+    def calcular(self) -> float:
+        """Encargada de devolver el resultado del
+        peso ideal en base a la fórmula elegida
+        """
         data_calculo_peso_ideal: DictCalculoPesoIdeal = self.get_data_persona()
 
-        if self.formula == FormulasPesoIdeal.LORENTZ:
+        if self.formula == FormulasPesoIdeal.LORENTZ or self.formula == FormulasPesoIdeal.LORENTZ.value:
             return peso_ideal_lorentz(**data_calculo_peso_ideal)
 
-        elif self.formula == FormulasPesoIdeal.PERRAULT:
+        elif self.formula == FormulasPesoIdeal.PERRAULT or self.formula == FormulasPesoIdeal.PERRAULT.value:
             return peso_ideal_perrault(estatura=data_calculo_peso_ideal.get("estatura"),
                                        edad=data_calculo_peso_ideal.get("edad"))
 
-        elif self.formula == FormulasPesoIdeal.BROCCA:
+        elif self.formula == FormulasPesoIdeal.BROCCA or self.formula == FormulasPesoIdeal.BROCCA.value:
             return brocca_peso_ideal(estatura=data_calculo_peso_ideal.get("estatura"))
 
 
@@ -446,19 +496,13 @@ sumatoria: float = suma(5, 5, 10.5, 5)
 print(sumatoria)
 
 if __name__ == "__main__":
-    persona1 = ValoracionNutricional(name="Kevin")
-    print(persona1)
 
-    print(persona1.diagnostico_imc(peso=75, estatura=170))
-    print(persona1.gasto_energetico(nombre="kevincin",
-                                    genero="hombre", edad=22, estatura=1.70, peso=75, formula="harris"))
+    persona = Persona(nombre="kevin asael", genero="hombre", edad=22, estatura=1.70, peso=75)
 
-    persona = Persona(nombre="kevin asael", genero="hombre", edad=22, estatura=170, peso=75)
-
-    mis_kcal = CalculadoraDeCalorias(persona=persona, formula="harris", eta=True)
+    mis_kcal = CalculadoraDeCalorias(persona=persona, formula=FormulasCalculoKcal.MIFFLIN, eta=True)
     print(mis_kcal)
 
-    print(mis_kcal.calcular_gasto_energetico())
+    print(mis_kcal.calcular())
 
     print(peso_ideal_perrault(estatura=170, edad=22))
     print(brocca_peso_ideal(estatura=170))
@@ -466,8 +510,8 @@ if __name__ == "__main__":
     print(formula_kcal_krumdieck(peso=75, estatura=170))
     diccionario = {"genero": "hombre", "estatura": 1.70, "edad": 22}
 
-    mi_peso_ideal = CalculadoraPesoIdeal(persona=persona, formula=FormulasPesoIdeal.LORENTZ)
-    print(mi_peso_ideal.calcular_peso_ideal())
+    mi_peso_ideal = CalculadoraPesoIdeal(persona=diccionario, formula=FormulasPesoIdeal.PERRAULT)
+    print(mi_peso_ideal.calcular())
 
     print(peso_ideal_lorentz(genero="hombre", estatura=170, edad=22))
     print(diccionario)
